@@ -20,6 +20,7 @@
     "dev:restart-host-daemon": "cross-env NODE_ENV=development node --conditions=source --import tsx packages/scripts/src/commands/request-dev-restart.ts host-daemon",
     "dev:host-daemon": "cross-env NODE_ENV=development dotenv -c development -- node --conditions=source --import tsx packages/scripts/src/commands/run-host-daemon.ts",
     "gg": "scripts/gg",
+    "gg:desktop:package": "BB_DESKTOP_RELEASE_CHANNEL=gg pnpm exec turbo run package --filter=@bb/desktop",
     "gg:agent": "scripts/gg-agent",
     "gg:biner:apply": "npx --yes @outfitter/biner@0.1.0-beta.0 apply",
     "gg:biner:check": "npx --yes @outfitter/biner@0.1.0-beta.0 check",
