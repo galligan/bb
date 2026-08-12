@@ -184,9 +184,12 @@ export function resolveElectronBuilderConfig(baseConfig, env) {
   config.productName = releaseConfig.applicationName;
   config.publish = [
     {
-      channel: releaseChannel,
+      channel: releaseConfig.updateChannel,
       provider: "generic",
-      url: createDesktopUpdateReleaseBaseUrl(releaseConfig.releaseTag),
+      url: createDesktopUpdateReleaseBaseUrl(
+        releaseConfig.releaseRepository,
+        releaseConfig.releaseTag,
+      ),
     },
   ];
 

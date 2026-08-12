@@ -28,6 +28,17 @@ The profile is isolated from bb by default:
 Override those values with `GG_DATA_DIR`, `GG_SERVER_PORT`, and
 `GG_HOST_DAEMON_PORT`.
 
+### Build the GG desktop app
+
+```sh
+pnpm gg:desktop:package
+```
+
+The packaged app is written to `apps/desktop/release/mac-arm64/GG.app`. It has
+its own macOS bundle identity (`dev.outfitter.gg`), Electron user-data directory,
+`~/.gg` runtime data, ports `48886`/`48887`, and fork-owned `desktop-gg` update
+feed, so it can run beside the published BB app without sharing state.
+
 ## Bring in upstream changes
 
 ```sh

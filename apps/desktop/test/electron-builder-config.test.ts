@@ -460,6 +460,28 @@ describe("electron-builder signing config", () => {
     });
   });
 
+  it("creates an isolated GG app identity and fork update feed", async () => {
+    const { config } = await readResolvedConfig({
+      BB_DESKTOP_RELEASE_CHANNEL: "gg",
+    });
+    const ggRelease = createDesktopReleaseInfo("gg");
+
+    expect(config.appId).toBe("dev.outfitter.gg");
+    expect(config.productName).toBe("GG");
+    expect(config.artifactName).toBe("gg-${version}-${arch}.${ext}");
+    expect(config.mac.icon).toBe("assets/icon-nightly.icns");
+    expect(config.publish[0]).toEqual({
+      channel: "latest",
+      provider: "generic",
+      url: ggRelease.updateReleaseBaseUrl,
+    });
+    expect(ggRelease).toMatchObject({
+      hostDaemonPort: 48887,
+      runtimeDataDirectoryName: ".gg",
+      serverPort: 48886,
+    });
+  });
+
   it("rejects unknown desktop release channels", async () => {
     const result = await runConfigScript({
       BB_DESKTOP_RELEASE_CHANNEL: "canary",
@@ -467,7 +489,7 @@ describe("electron-builder signing config", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
-      "BB_DESKTOP_RELEASE_CHANNEL must be latest or nightly",
+      "BB_DESKTOP_RELEASE_CHANNEL must be latest, nightly, or gg",
     );
   });
 

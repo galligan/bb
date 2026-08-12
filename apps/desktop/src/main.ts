@@ -322,7 +322,7 @@ let existingServerDialogPreloadPath: string | null = null;
 function resolveDesktopServerUrl(args: ResolveDesktopServerUrlArgs): string {
   const rawPort = args.env.BB_SERVER_PORT?.trim();
   if (rawPort === undefined || rawPort.length === 0) {
-    return DEFAULT_BB_SERVER_URL;
+    return `http://127.0.0.1:${String(DESKTOP_RELEASE_INFO.serverPort)}`;
   }
 
   const port = Number(rawPort);
@@ -478,7 +478,7 @@ function createDesktopLogger(): DesktopAutoUpdateLogger {
 function resolveDataDirFromEnv(args: ResolveDataDirFromEnvArgs): string {
   const rawDataDir = args.env.BB_DATA_DIR?.trim();
   if (rawDataDir === undefined || rawDataDir.length === 0) {
-    return join(args.homeDir, ".bb");
+    return join(args.homeDir, DESKTOP_RELEASE_INFO.runtimeDataDirectoryName);
   }
   if (rawDataDir === "~") {
     return args.homeDir;
@@ -1652,11 +1652,20 @@ function registerDesktopBrowserWindowLifecycle({
 async function startOwnedRuntime(
   args: StartOwnedRuntimeArgs,
 ): Promise<DesktopRuntime | null> {
+  const dataDir = resolveDataDirFromEnv({
+    env: process.env,
+    homeDir: homedir(),
+  });
   const bbProcess = startBbAppProcess({
     bridgePath: args.bridgePath,
     cwd: homedir(),
     env: {
       ...process.env,
+      BB_DATA_DIR: dataDir,
+      BB_HOST_DAEMON_PORT:
+        process.env.BB_HOST_DAEMON_PORT?.trim() ||
+        String(DESKTOP_RELEASE_INFO.hostDaemonPort),
+      BB_SERVER_PORT: new URL(args.serverUrl).port,
       [APP_SURFACE_ENV_NAME]: APP_SURFACE_DESKTOP,
     },
     logLineLimit: PROCESS_LOG_LINE_LIMIT,
