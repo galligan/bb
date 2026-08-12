@@ -1,5 +1,14 @@
 # Codebase Guidelines
 
+## gg Fork Workflow
+
+This checkout is the `galligan/bb` fork. Before changing code, read
+[FORK.md](FORK.md) and decide whether the work is fork-only or intended for
+`get-bb/bb`. Fork-only work belongs on `gg` or a branch based on `gg`. Upstream
+contributions must use `scripts/gg-worktree setup <slot> <branch>`, which starts
+from `upstream/main` and installs the contribution guard. Never base an upstream
+contribution on `gg`, merge `gg` into it, or bypass that guard.
+
 ## Simplicity First
 
 - When renaming a domain concept, search project-wide for stale names in variables, files, query keys, constants, tests, and docs. TypeScript only catches type references.

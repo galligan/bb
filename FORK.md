@@ -3,6 +3,11 @@
 This fork keeps `main` as an exact mirror of `get-bb/bb` and keeps fork-only
 work on the long-lived `gg` branch.
 
+Root `AGENTS.md` points agents here. Codex/ChatGPT reads `AGENTS.md` directly;
+Claude reads it through the repository's `CLAUDE.md` pointer. Keep shared fork
+workflow guidance provider-neutral in `AGENTS.md` or this document rather than
+duplicating it across harness-specific files.
+
 ## Run gg beside bb
 
 Install the local command once:

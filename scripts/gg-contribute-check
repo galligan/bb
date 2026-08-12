@@ -42,6 +42,12 @@ if [ -n "$fork_paths" ]; then
   exit 1
 fi
 
+if git diff "$base"...HEAD -- AGENTS.md CLAUDE.md |
+  rg -q '^\+.*(gg Fork Workflow|galligan/bb.*fork|scripts/gg-worktree)'; then
+  printf 'Fork-only agent instructions are present in the upstream contribution.\n' >&2
+  exit 1
+fi
+
 git diff --check "$base"...HEAD
 
 printf 'Upstream contribution check passed.\n'
