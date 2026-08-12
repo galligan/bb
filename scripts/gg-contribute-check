@@ -1,0 +1,59 @@
+#!/bin/sh
+
+set -eu
+
+if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  printf 'gg-contribute-check must run inside a bb worktree.\n' >&2
+  exit 1
+fi
+
+cd "$repo_root"
+branch=$(git branch --show-current)
+
+case $branch in
+  ""|main|gg|feat/fork/*|fix/fork/*|chore/fork/*)
+    printf 'Branch %s is not an upstream contribution branch.\n' "${branch:-<detached>}" >&2
+    exit 1
+    ;;
+esac
+
+git remote get-url upstream >/dev/null 2>&1 || {
+  printf 'Missing upstream remote.\n' >&2
+  exit 1
+}
+
+if git show-ref --verify --quiet refs/heads/gg &&
+  git merge-base --is-ancestor gg HEAD; then
+  printf 'This branch contains the fork-only gg branch; refusing upstream contribution.\n' >&2
+  exit 1
+fi
+
+base=$(git merge-base HEAD upstream/main)
+contribution_paths=$(
+  {
+    git diff --name-only "$base"...HEAD
+    git log --format= --name-only "$base"..HEAD
+  } | sort -u
+)
+fork_paths=$(printf '%s\n' "$contribution_paths" | rg '^(FORK\.md|biner\.toml|\.claude/|\.codex/|\.worktreeinclude$|scripts/gg)' || true)
+
+if [ -n "$fork_paths" ]; then
+  printf 'Fork-only paths are present in the upstream contribution:\n%s\n' "$fork_paths" >&2
+  exit 1
+fi
+
+if git diff "$base"...HEAD -- AGENTS.md CLAUDE.md |
+  rg -q '^\+.*(gg Fork Workflow|galligan/bb.*fork|scripts/gg-worktree)'; then
+  printf 'Fork-only agent instructions are present in the upstream contribution.\n' >&2
+  exit 1
+fi
+
+git diff --check "$base"...HEAD
+
+printf 'Upstream contribution check passed.\n'
+printf 'Base:   %s\n' "$(git rev-parse --short "$base")"
+printf 'Branch: %s\n' "$branch"
+printf '\nCommits:\n'
+git log --oneline "$base"..HEAD
+printf '\nDiff:\n'
+git diff --stat "$base"...HEAD

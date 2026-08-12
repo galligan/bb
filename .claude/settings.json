@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": biner-setup fmt-v2; \"$(git rev-parse --git-common-dir)/../scripts/gg-agent\" setup",
+            "statusMessage": "biner: running [setup]"
+          }
+        ]
+      }
+    ]
+  }
+}
