@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repo_root"
+
+if [ "$(git branch --show-current)" != gg ]; then
+  printf 'Switch to gg before merging upstream changes.\n' >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  printf 'The working tree must be clean before merging upstream changes.\n' >&2
+  exit 1
+fi
+
+if ! git remote get-url upstream >/dev/null 2>&1; then
+  printf 'Missing upstream remote. Add https://github.com/get-bb/bb.git as upstream.\n' >&2
+  exit 1
+fi
+
+git fetch upstream main
+git merge --no-edit upstream/main
+
+printf '\nUpstream is merged into gg. Review it, then run: git push origin gg\n'

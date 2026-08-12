@@ -1,0 +1,39 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repo_root"
+
+if [ "$(git branch --show-current)" != gg ]; then
+  printf 'Switch to gg before syncing the upstream mirror.\n' >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  printf 'The working tree must be clean before syncing main.\n' >&2
+  exit 1
+fi
+
+if ! git remote get-url upstream >/dev/null 2>&1; then
+  printf 'Missing upstream remote. Add https://github.com/get-bb/bb.git as upstream.\n' >&2
+  exit 1
+fi
+
+git fetch upstream main
+git fetch origin main
+
+if ! git merge-base --is-ancestor main upstream/main; then
+  printf 'Local main has diverged from upstream/main; refusing to rewrite it.\n' >&2
+  exit 1
+fi
+
+if ! git merge-base --is-ancestor origin/main upstream/main; then
+  printf 'Fork main has diverged from upstream/main; refusing to rewrite it.\n' >&2
+  exit 1
+fi
+
+git push origin upstream/main:main
+git branch --force main upstream/main
+
+printf '\nLocal and fork main now mirror upstream/main.\n'

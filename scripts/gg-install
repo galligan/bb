@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+source_path="$repo_root/scripts/gg"
+bin_dir=${GG_BIN_DIR:-"$HOME/.local/bin"}
+target_path="$bin_dir/gg"
+
+mkdir -p "$bin_dir"
+
+if [ -e "$target_path" ] || [ -L "$target_path" ]; then
+  if [ -L "$target_path" ] && [ "$(readlink "$target_path")" = "$source_path" ]; then
+    printf 'gg is already installed at %s\n' "$target_path"
+    exit 0
+  fi
+
+  printf 'Refusing to replace existing path: %s\n' "$target_path" >&2
+  exit 1
+fi
+
+ln -s "$source_path" "$target_path"
+printf 'Installed gg at %s\n' "$target_path"

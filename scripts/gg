@@ -1,0 +1,77 @@
+#!/bin/sh
+
+set -eu
+
+script_path=$0
+while [ -L "$script_path" ]; do
+  script_dir=$(CDPATH= cd -- "$(dirname -- "$script_path")" && pwd)
+  link_target=$(readlink "$script_path")
+  case $link_target in
+    /*) script_path=$link_target ;;
+    *) script_path="$script_dir/$link_target" ;;
+  esac
+done
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$script_path")/.." && pwd)
+data_dir=${GG_DATA_DIR:-"$HOME/.gg"}
+server_port=${GG_SERVER_PORT:-48886}
+host_daemon_port=${GG_HOST_DAEMON_PORT:-48887}
+server_url="http://127.0.0.1:${server_port}"
+
+print_help() {
+  cat <<'EOF'
+gg - run this fork without sharing state or ports with bb
+
+Usage:
+  gg                         Start the gg server and host daemon
+  gg start|stop              Start or stop the gg stack
+  gg <bb-cli-command>        Run the bb CLI against gg
+  gg app <bb-app-args...>    Run an explicit bb-app command for gg
+  gg cli <bb-cli-args...>    Run an explicit bb CLI command against gg
+
+Profile overrides:
+  GG_DATA_DIR                Default: ~/.gg
+  GG_SERVER_PORT             Default: 48886
+  GG_HOST_DAEMON_PORT        Default: 48887
+EOF
+}
+
+mode=cli
+case ${1-} in
+  "")
+    mode=app
+    ;;
+  -h|--help|help)
+    print_help
+    exit 0
+    ;;
+  app)
+    mode=app
+    shift
+    ;;
+  cli)
+    shift
+    ;;
+  start|stop|config|env|client|host-daemon)
+    mode=app
+    ;;
+esac
+
+cd "$repo_root"
+pnpm run --silent bb-app:prepare 1>&2
+
+export BB_DATA_DIR="$data_dir"
+export BB_HOST_DAEMON_PORT="$host_daemon_port"
+export BB_SERVER_PORT="$server_port"
+export BB_SERVER_URL="$server_url"
+export NODE_ENV=production
+
+if [ "$mode" = app ]; then
+  exec node packages/bb-app/dist/bb-app.js \
+    --data-dir "$data_dir" \
+    --server-port "$server_port" \
+    --host-daemon-port "$host_daemon_port" \
+    "$@"
+fi
+
+exec node packages/bb-app/dist/bb.js "$@"
