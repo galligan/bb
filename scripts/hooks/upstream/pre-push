@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+common_dir=$(git rev-parse --git-common-dir)
+case $common_dir in
+  /*) ;;
+  *) common_dir=$(CDPATH= cd -- "$common_dir" && pwd) ;;
+esac
+control_root=$(CDPATH= cd -- "$common_dir/.." && pwd)
+
+if [ "${1-}" != origin ]; then
+  printf 'Contribution worktrees may only push to the fork remote named origin.\n' >&2
+  exit 1
+fi
+
+head_sha=$(git rev-parse HEAD)
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  if [ "$local_sha" != "$head_sha" ]; then
+    printf 'Contribution worktrees may only push their current HEAD.\n' >&2
+    exit 1
+  fi
+done
+
+exec "$control_root/scripts/gg-contribute-check"

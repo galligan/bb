@@ -1,0 +1,203 @@
+#!/bin/sh
+
+set -eu
+
+control_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+worktrees_root=$(CDPATH= cd -- "$control_root/.." && pwd)/worktrees/upstream
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/gg-worktree setup <slot> [branch]
+  scripts/gg-worktree teardown <slot>
+  scripts/gg-worktree remove <slot>
+  scripts/gg-worktree list
+
+Contribution worktrees live under ../worktrees/upstream/<slot>. Setup without
+a branch prepares a parked slot. Setup with a branch starts or resumes work from
+upstream/main. Teardown requires a clean, pushed branch and parks it for reuse.
+EOF
+}
+
+validate_slot() {
+  case $1 in
+    ""|*[!a-zA-Z0-9._-]*)
+      printf 'Invalid worktree slot: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+}
+
+slot_path() {
+  printf '%s/%s\n' "$worktrees_root" "$1"
+}
+
+require_registered_slot() {
+  target_path=$1
+  git -C "$control_root" worktree list --porcelain |
+    rg -Fx "worktree $target_path" >/dev/null || {
+      printf 'Unknown contribution worktree: %s\n' "$target_path" >&2
+      exit 1
+    }
+}
+
+require_clean_slot() {
+  target_path=$1
+  if [ -n "$(git -C "$target_path" status --porcelain)" ]; then
+    printf 'Contribution worktree is dirty: %s\n' "$target_path" >&2
+    exit 1
+  fi
+}
+
+install_local_surfaces() {
+  target_path=$1
+  for relative_path in .claude/settings.json .codex/environments/environment.toml; do
+    if git -C "$target_path" ls-files --error-unmatch "$relative_path" >/dev/null 2>&1; then
+      printf 'Upstream now tracks %s; refusing to overlay fork-local agent config.\n' "$relative_path" >&2
+      exit 1
+    fi
+    mkdir -p "$target_path/$(dirname -- "$relative_path")"
+    cp "$control_root/$relative_path" "$target_path/$relative_path"
+  done
+
+  worktree_git_dir=$(git -C "$target_path" rev-parse --git-dir)
+  case $worktree_git_dir in
+    /*) ;;
+    *) worktree_git_dir="$target_path/$worktree_git_dir" ;;
+  esac
+  mkdir -p "$worktree_git_dir/info"
+  exclude_file="$worktree_git_dir/info/exclude"
+  touch "$exclude_file"
+  for ignored_path in /.claude/ /.codex/; do
+    if ! rg -Fx "$ignored_path" "$exclude_file" >/dev/null 2>&1; then
+      printf '%s\n' "$ignored_path" >> "$exclude_file"
+    fi
+  done
+
+  git -C "$control_root" config extensions.worktreeConfig true
+  git -C "$target_path" config --worktree core.hooksPath "$control_root/scripts/hooks/upstream"
+}
+
+command_name=${1:-help}
+case $command_name in
+  setup)
+    { [ "$#" -eq 2 ] || [ "$#" -eq 3 ]; } || {
+      usage >&2
+      exit 2
+    }
+    slot=$2
+    branch=${3-}
+    validate_slot "$slot"
+    if [ -n "$branch" ]; then
+      git check-ref-format --branch "$branch" >/dev/null
+    fi
+    target_path=$(slot_path "$slot")
+
+    git -C "$control_root" fetch upstream main
+    git -C "$control_root" fetch origin
+
+    if [ ! -d "$target_path" ]; then
+      mkdir -p "$worktrees_root"
+      git -C "$control_root" worktree add --detach "$target_path" upstream/main
+    else
+      require_registered_slot "$target_path"
+    fi
+
+    require_clean_slot "$target_path"
+    current_branch=$(git -C "$target_path" branch --show-current)
+    if [ -z "$branch" ]; then
+      if [ -n "$current_branch" ]; then
+        printf 'Slot %s is active on %s; teardown it before parking.\n' "$slot" "$current_branch" >&2
+        exit 1
+      fi
+      git -C "$target_path" switch --detach upstream/main
+      install_local_surfaces "$target_path"
+      (cd "$target_path" && "$control_root/scripts/gg-agent" setup)
+      printf '\nParked contribution worktree ready: %s\n' "$target_path"
+      exit 0
+    fi
+
+    if [ -n "$current_branch" ] && [ "$current_branch" != "$branch" ]; then
+      printf 'Slot %s is already active on %s; teardown it first.\n' "$slot" "$current_branch" >&2
+      exit 1
+    fi
+
+    if [ -z "$current_branch" ]; then
+      if git -C "$control_root" show-ref --verify --quiet "refs/heads/$branch"; then
+        git -C "$target_path" switch "$branch"
+      elif git -C "$control_root" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+        git -C "$target_path" switch --create "$branch" --track "origin/$branch"
+      else
+        git -C "$target_path" switch --create "$branch" upstream/main
+      fi
+    fi
+
+    install_local_surfaces "$target_path"
+    (cd "$target_path" && "$control_root/scripts/gg-agent" setup)
+    (cd "$target_path" && "$control_root/scripts/gg-contribute-check")
+    printf '\nContribution worktree ready: %s\n' "$target_path"
+    ;;
+  teardown)
+    [ "$#" -eq 2 ] || {
+      usage >&2
+      exit 2
+    }
+    slot=$2
+    validate_slot "$slot"
+    target_path=$(slot_path "$slot")
+    require_registered_slot "$target_path"
+    require_clean_slot "$target_path"
+    branch=$(git -C "$target_path" branch --show-current)
+    [ -n "$branch" ] || {
+      printf 'Slot %s is already parked.\n' "$slot"
+      exit 0
+    }
+
+    (cd "$target_path" && "$control_root/scripts/gg-contribute-check")
+    contribution_base=$(git -C "$target_path" merge-base HEAD upstream/main)
+    if [ "$(git -C "$target_path" rev-parse HEAD)" != "$contribution_base" ]; then
+      git -C "$control_root" fetch origin "$branch" >/dev/null 2>&1 || true
+      if ! git -C "$control_root" show-ref --verify --quiet "refs/remotes/origin/$branch" ||
+        [ "$(git -C "$target_path" rev-parse HEAD)" != "$(git -C "$control_root" rev-parse "origin/$branch")" ]; then
+        printf 'Push %s to origin before tearing down this slot.\n' "$branch" >&2
+        exit 1
+      fi
+    fi
+
+    (cd "$target_path" && "$control_root/scripts/gg-agent" teardown)
+    git -C "$control_root" fetch upstream main
+    git -C "$target_path" switch --detach upstream/main
+    printf 'Contribution worktree parked for reuse: %s\n' "$target_path"
+    ;;
+  remove)
+    [ "$#" -eq 2 ] || {
+      usage >&2
+      exit 2
+    }
+    slot=$2
+    validate_slot "$slot"
+    target_path=$(slot_path "$slot")
+    require_registered_slot "$target_path"
+    require_clean_slot "$target_path"
+    if [ -n "$(git -C "$target_path" branch --show-current)" ]; then
+      printf 'Teardown slot %s before removing it.\n' "$slot" >&2
+      exit 1
+    fi
+    (cd "$target_path" && "$control_root/scripts/gg-agent" teardown)
+    rm -f "$target_path/.claude/settings.json" "$target_path/.codex/environments/environment.toml"
+    rmdir "$target_path/.claude" "$target_path/.codex/environments" "$target_path/.codex" 2>/dev/null || true
+    git -C "$control_root" worktree remove "$target_path"
+    printf 'Removed contribution worktree: %s\n' "$target_path"
+    ;;
+  list)
+    git -C "$control_root" worktree list
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    printf 'Unknown gg-worktree command: %s\n' "$command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

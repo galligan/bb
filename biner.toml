@@ -1,0 +1,11 @@
+version = 1
+targets = ["claude", "codex"]
+
+[setup]
+run = ["\"$(git rev-parse --git-common-dir)/../scripts/gg-agent\" setup"]
+
+[teardown]
+run = ["\"$(git rev-parse --git-common-dir)/../scripts/gg-agent\" teardown"]
+
+[codex]
+name = "bb-upstream-contribution"

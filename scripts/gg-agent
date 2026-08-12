@@ -1,0 +1,86 @@
+#!/bin/sh
+
+set -eu
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/gg-agent setup|teardown|doctor
+
+  setup     Verify the runtime and install this worktree's dependencies
+  teardown  Stop this worktree's dev processes without deleting source
+  doctor    Print runtime, branch, and worktree diagnostics without mutation
+EOF
+}
+
+if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  printf 'gg-agent must run inside a bb worktree.\n' >&2
+  exit 1
+fi
+
+command_name=${1:-setup}
+cd "$repo_root"
+
+is_linked_worktree() {
+  git_dir=$(CDPATH= cd -- "$(git rev-parse --git-dir)" && pwd)
+  common_dir=$(CDPATH= cd -- "$(git rev-parse --git-common-dir)" && pwd)
+  [ "$git_dir" != "$common_dir" ]
+}
+
+print_diagnostics() {
+  printf '\nWorktree: %s\n' "$repo_root"
+  printf 'Branch:   %s\n' "$(git branch --show-current || true)"
+  printf 'HEAD:     %s\n' "$(git rev-parse --short HEAD)"
+  git status --short --branch
+}
+
+case $command_name in
+  setup)
+    command -v node >/dev/null 2>&1 || {
+      printf 'Node is required (package.json requires Node >=22.19.0).\n' >&2
+      exit 1
+    }
+    command -v pnpm >/dev/null 2>&1 || {
+      printf 'pnpm is required (package.json pins pnpm 9.15.0).\n' >&2
+      exit 1
+    }
+
+    node -e '
+      const [major, minor] = process.versions.node.split(".").map(Number);
+      if (major < 22 || (major === 22 && minor < 19)) {
+        console.error(`Node ${process.versions.node} is too old; bb requires >=22.19.0.`);
+        process.exit(1);
+      }
+    '
+
+    printf 'Installing frozen dependencies for %s...\n' "$repo_root"
+    pnpm install --frozen-lockfile --prefer-offline --reporter=silent
+    printf 'Dependencies ready.\n'
+    print_diagnostics
+    ;;
+  teardown)
+    if is_linked_worktree; then
+      scripts/bb-dev-app stop
+    else
+      printf 'Primary checkout detected; no worktree dev processes stopped.\n'
+    fi
+    print_diagnostics
+    ;;
+  doctor)
+    printf 'Node:     %s\n' "$(node --version 2>/dev/null || printf 'missing')"
+    printf 'pnpm:     %s\n' "$(pnpm --version 2>/dev/null || printf 'missing')"
+    if is_linked_worktree; then
+      printf 'Kind:     linked worktree\n'
+    else
+      printf 'Kind:     primary checkout\n'
+    fi
+    print_diagnostics
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    printf 'Unknown gg-agent command: %s\n' "$command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

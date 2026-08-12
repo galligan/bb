@@ -40,7 +40,54 @@ polluting `main`.
 ## Choose a branch base
 
 - Fork-only work: branch from `gg`, then merge back into `gg`.
-- Upstream contribution: branch from `main` and open the PR against
-  `get-bb/bb:main`. After it lands, sync `main` and merge upstream into `gg`.
+- Upstream contribution: use a contribution worktree created from
+  `upstream/main`, then open the PR against `get-bb/bb:main`.
 
 Do not merge `gg` into `main`.
+
+## Upstream contribution worktrees
+
+Create or reuse a named worktree slot:
+
+```sh
+scripts/gg-worktree setup contrib-1
+scripts/gg-worktree setup contrib-1 fix/example-upstream-change
+cd ../worktrees/upstream/contrib-1
+```
+
+Each slot starts from `upstream/main`, installs its own dependencies, and gets
+fork-local Claude/Codex setup plus a pre-push contamination check. Those local
+files are excluded from Git and cannot enter the contribution.
+
+Before pushing, inspect the exact contribution:
+
+```sh
+scripts/gg-contribute-check
+git push --set-upstream origin HEAD
+```
+
+After the branch is clean and pushed, park the worktree for reuse:
+
+```sh
+cd /path/to/bb
+scripts/gg-worktree teardown contrib-1
+```
+
+`teardown` stops that worktree's dev processes and detaches it at the latest
+`upstream/main`. It preserves the worktree and its dependencies. Use
+`scripts/gg-worktree remove contrib-1` only when the parked slot is no longer
+wanted.
+
+## Agent lifecycle configuration
+
+`biner.toml` is canonical for Claude and Codex setup/cleanup wiring. Regenerate
+and verify the native files with:
+
+```sh
+pnpm gg:biner:apply
+pnpm gg:biner:check
+```
+
+Setup verifies Node and pnpm, installs the frozen dependency graph, and prints
+the worktree identity. Cleanup is conservative: it stops linked-worktree dev
+processes but does not delete source, branches, dependencies, or unpushed work.
