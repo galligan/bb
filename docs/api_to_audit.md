@@ -650,7 +650,9 @@ Docs: `backend-events.md`.
   SDK uses this checkpoint. Verify plugin caller attribution survives a wait
   and drain. A queued `compact-first` payload retains the requested operation
   until compaction and its follow-up are recorded atomically; only then does
-  it become `inline`. Audit restart, grouping, cancellation and claim races.
+  it become `inline`. Automatic compact-first drain checks the manual-stop
+  pause even when it was held by a plugin; Send-now remains explicit override.
+  Audit restart, grouping, cancellation and claim races.
   This remains a policy hook with Send-now override, not the unconditional
   provider-runtime security boundary requested in issue #6134.
 - **"Never started" is a thread status.** Confirm `pending` is maintained

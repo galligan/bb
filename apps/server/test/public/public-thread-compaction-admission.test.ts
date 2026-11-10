@@ -14,24 +14,9 @@ import {
   invokePluginInline,
   setPluginHookProvider,
 } from "../../src/services/plugins/plugin-hook-registry.js";
-import {
-  EMPTY_WORKSPACE_AGENT_CONTEXT,
-  registerHostRpcResponder,
-  type HostRpcHandlerResult,
-} from "../helpers/host-rpc.js";
-import {
-  seedEnvironment,
-  seedHostSession,
-  seedProjectWithSource,
-  seedThread,
-  seedThreadRuntimeState,
-} from "../helpers/seed.js";
+import { seedCompactionFixture } from "../helpers/thread-compaction.js";
 import { readJson } from "../helpers/json.js";
-import {
-  withTestHarness,
-  startTestServer,
-  type TestAppHarness,
-} from "../helpers/test-app.js";
+import { withTestHarness, startTestServer } from "../helpers/test-app.js";
 import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
 import { runQueuedMessageDispatch } from "../../src/services/threads/queued-message-dispatch.js";
 
@@ -58,42 +43,10 @@ const surfaces = [
   },
 ];
 
-function seedFixture(harness: TestAppHarness) {
-  const { host, session } = seedHostSession(harness.deps);
-  const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
-  const environment = seedEnvironment(harness.deps, {
-    hostId: host.id,
-    projectId: project.id,
-  });
-  const thread = seedThread(harness.deps, {
-    environmentId: environment.id,
-    projectId: project.id,
-    providerId: "pi",
-    status: "idle",
-  });
-  seedThreadRuntimeState(harness.deps, {
-    environmentId: environment.id,
-    threadId: thread.id,
-    providerThreadId: "admission-provider-thread",
-  });
-  const responder = registerHostRpcResponder(harness, {
-    hostId: host.id,
-    sessionId: session.id,
-    handle: ({ command }): HostRpcHandlerResult => {
-      if (command.type === "host.read_workspace_agent_context")
-        return { ok: true, result: EMPTY_WORKSPACE_AGENT_CONTEXT };
-      if (command.type === "turn.submit")
-        return { ok: true, result: { trace: { spans: [] } } };
-      return { ok: true, result: {} };
-    },
-  });
-  return { thread, responder };
-}
-
 describe.each(surfaces)("compaction admission: $name", ({ path, payload }) => {
   it("refuses before any provider request when dispatch is rejected", async () => {
     await withTestHarness(async (harness) => {
-      const { thread, responder } = seedFixture(harness);
+      const { thread, responder } = seedCompactionFixture(harness);
       const reject = vi.fn(() => ({
         action: "reject" as const,
         message: "Stopped assignment",
@@ -143,7 +96,7 @@ describe.each(surfaces)("compaction admission: $name", ({ path, payload }) => {
   });
   it("preserves the requested compaction across a policy wait and drains it once", async () => {
     await withTestHarness(async (harness) => {
-      const { thread, responder } = seedFixture(harness);
+      const { thread, responder } = seedCompactionFixture(harness);
       let holding = true;
       setPluginHookProvider({
         listHooks: () => [
@@ -220,7 +173,7 @@ describe.each(surfaces)("compaction admission: $name", ({ path, payload }) => {
 it("preserves the authenticated plugin caller through native Compact admission and queue drain", async () => {
   const server = await startTestServer();
   try {
-    const { thread, responder } = seedFixture(server);
+    const { thread, responder } = seedCompactionFixture(server);
     server.pluginService.bindSdk({ baseUrl: server.baseUrl });
     const pluginRoot = join(server.config.dataDir, "compact-caller-plugin");
     await mkdir(pluginRoot);
@@ -314,7 +267,7 @@ it("preserves the authenticated plugin caller through native Compact admission a
 
 it("does not start compaction after its queued claim is lost during admission", async () => {
   await withTestHarness(async (harness) => {
-    const { thread, responder } = seedFixture(harness);
+    const { thread, responder } = seedCompactionFixture(harness);
     let holding = true;
     let released = false;
     setPluginHookProvider({

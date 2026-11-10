@@ -283,7 +283,7 @@ export interface DispatchAttemptArgs {
 
 export type DispatchAttemptOutcome =
   | { kind: "dispatched" }
-  | { kind: "queued"; entry: ThreadQueuedMessage };
+  | { kind: "queued"; entry: ThreadQueuedMessage; compactionStarted?: true };
 
 /**
  * Whether this attempt starts a turn or joins one that is already running.
@@ -763,7 +763,7 @@ async function runDispatchAttempt(
             throw createQueuedMessageAutoSendPausedError();
         },
       });
-      return { kind: "queued", entry };
+      return { kind: "queued", entry, compactionStarted: true };
     }
     await sendThreadMessage(deps, {
       environment,
