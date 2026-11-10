@@ -624,8 +624,6 @@ async function sendThreadMessageWithoutContextClear(
   const execution = await buildExecutionOptions(deps, payload, {
     threadId: thread.id,
   });
-  // No hook pass here. User messages are decided ONCE, at the dispatch
-  // checkpoint in `attemptDispatch`, before they reach this function.
   const permissionEscalation = resolvePermissionEscalation({
     initiator,
   });
