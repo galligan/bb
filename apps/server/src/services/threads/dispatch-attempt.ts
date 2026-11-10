@@ -1,4 +1,8 @@
 import {
+  assertThreadCanCompact,
+  compactBeforeSend,
+} from "./thread-compaction.js";
+import {
   requestQueuedMachineReadiness,
   requestQueuedMessageDispatch,
 } from "./queued-message-dispatch.js";
@@ -305,10 +309,7 @@ export function resolveDispatchAttemptKind(
  *
  * Every message on its way to a provider passes through here exactly once per
  * attempt, whether it was just sent, was queued and became eligible again, or
- * is a retry of a turn that failed. Two named exceptions skip the plugin pass
- * by design: a user's Send-now (an explicit override of policy waits), and the
- * conversation operations — compaction, an edit's re-send — that never come
- * through here at all. The shape is the plan's three steps:
+ * is a retry of a turn that failed.
  *
  * 1. **Plugin policy.** One hook pass decides whether the submission may
  *    proceed before operational state can defer it.
@@ -455,11 +456,8 @@ async function runDispatchAttempt(
     payload,
     args.executionDefaults ?? { threadId: thread.id },
   );
-  if (payload.compactFirst) {
-    const { compactFirst, ...request } = payload;
-    await compactThreadContext(deps, thread);
-    payload = request;
-    args = { ...args, payload };
+  if (payload.compactFirst && args.source.kind !== "drain") {
+    assertThreadCanCompact(deps, thread);
   }
   const resolvedPayload = resolveExecutionIntoPayload(payload, execution);
   const queuedMessage: QueuedDispatchMessage = {
@@ -749,6 +747,24 @@ async function runDispatchAttempt(
   markTurnTraceSpan("dispatch.checkpoint.done");
   const environment = await requireThreadCommandEnvironment(deps, { thread });
   try {
+    if (payload.compactFirst) {
+      const entry = await compactBeforeSend(deps, {
+        thread,
+        message: queuedMessage,
+        claimed,
+        trigger: args.trigger,
+        beforeAppendInTransaction: ({ tx }) => {
+          if (getThread(tx, thread.id)?.status !== thread.status)
+            throw new DispatchThreadStatusChangedError();
+          if (
+            respectManualStopPause &&
+            isThreadQueueAutoSendPaused(tx, thread.id)
+          )
+            throw createQueuedMessageAutoSendPausedError();
+        },
+      });
+      return { kind: "queued", entry };
+    }
     await sendThreadMessage(deps, {
       environment,
       originPluginId: args.originPluginId,
@@ -1021,36 +1037,26 @@ function resolveExecutionIntoPayload(
 export async function compactThreadContext(
   deps: LoggedPendingInteractionWorkSessionDeps,
   thread: Thread,
+  attribution: Pick<DispatchAttemptArgs, "origin" | "originPluginId"> = {
+    origin: null,
+    originPluginId: null,
+  },
 ): Promise<void> {
-  ensureThreadIsWritable(thread);
-  if (!deps.providerRegistry.supportsManualCompaction(thread.providerId)) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      `Provider "${thread.providerId}" does not support manual context compaction`,
-    );
-  }
-  if (thread.status !== "idle" && thread.status !== "error") {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Context can only be compacted while the thread is idle or errored",
-    );
-  }
-
-  const environment = await requireThreadCommandEnvironment(deps, { thread });
+  assertThreadCanCompact(deps, thread);
   await attemptDispatch(deps, {
     thread,
     payload: {
       input: createStandaloneBuiltinCompactCommandInput(),
       mode: "start",
+      ...(attribution.originPluginId === null
+        ? {}
+        : { originPluginId: attribution.originPluginId }),
     },
-    source: { kind: "operation", environment },
+    source: { kind: "inline" },
     queuePayload: { kind: "inline" },
     pluginSubmission: null,
     systemNotice: null,
-    origin: null,
-    originPluginId: null,
+    ...attribution,
     startedOnBehalfOf: null,
     trigger: "user",
   });

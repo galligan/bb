@@ -1815,6 +1815,7 @@ export function setQueuedThreadMessageGroupBoundary({
 }
 
 export interface RequeueClaimedQueuedThreadMessagesArgs {
+  compactionStarted?: true;
   /** Every row the drain claimed, lead first. */
   claims: readonly ClaimedQueuedThreadMessageMutationArgs[];
   threadId: string;
@@ -1836,6 +1837,19 @@ export function requeueClaimedQueuedThreadMessages(
   };
   const queued = db.transaction(
     (tx) => {
+      if (
+        args.compactionStarted &&
+        args.claims.some((claim) => {
+          const row = getQueuedThreadMessage(tx, claim.id);
+          return (
+            !row ||
+            row.threadId !== args.threadId ||
+            row.claimToken !== claim.claimToken
+          );
+        })
+      ) {
+        return null;
+      }
       const now = Date.now();
       let queuedLead: QueuedThreadMessageRow | null = null;
       for (const claim of args.claims) {
@@ -1844,7 +1858,15 @@ export function requeueClaimedQueuedThreadMessages(
         const ownsClaim = row.claimToken === claim.claimToken;
         if (!ownsClaim && (claim !== lead || isQueuedThreadMessageClaimed(row)))
           continue;
-        const updated = transitionQueuedMessage(tx, { now, row, transition });
+        let updated = transitionQueuedMessage(tx, { now, row, transition });
+        if (args.compactionStarted && updated?.payloadKind === "compact-first") {
+          updated = tx
+            .update(queuedThreadMessages)
+            .set({ payloadKind: "inline" })
+            .where(eq(queuedThreadMessages.id, updated.id))
+            .returning()
+            .get()!;
+        }
         if (claim === lead) queuedLead = updated;
       }
       return queuedLead;

@@ -760,6 +760,11 @@ export interface PluginHooks {
   /**
    * Answer a hook.
    *
+   * Native compaction uses this checkpoint, including calls through the bound
+   * plugin SDK with their originPluginId. A compactFirst send is admitted
+   * before compaction and retains that intent while queued; its follow-up
+   * passes the checkpoint again after compaction.
+   *
    * **Hooks are questions core asks.** Core stops at a checkpoint, hands the
    * handler a context, and ACTS ON what it returns — the opposite of
    * `bb.events`, whose handlers are told what already happened and whose

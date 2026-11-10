@@ -1269,6 +1269,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "See the thread, project, machine, and prompt before the turn runs",
           "Hold messages until a condition clears, such as a concurrency limit",
           "Leave people a Send now override",
+          "Check native compaction and compact-before-send before provider work starts",
+          "Keep a waiting compact-before-send request's intent in the durable queue",
         ],
         apiSymbols: [
           "PluginHooks",

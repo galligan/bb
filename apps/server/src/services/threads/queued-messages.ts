@@ -361,6 +361,9 @@ function sendQueuedMessagePayload(
   return {
     input: queuedMessage.content,
     mode,
+    ...(queuedMessage.payload.kind === "compact-first"
+      ? { compactFirst: true }
+      : {}),
     model: queuedMessage.model,
     permissionMode: queuedMessage.permissionMode,
     reasoningLevel: queuedMessage.reasoningLevel,
@@ -503,6 +506,11 @@ async function sendClaimedQueuedMessageForThread(
           )
         : { input, mode }),
       ...(inputGroups.length > 1 ? { inputGroups } : {}),
+      ...(queuedMessages.some(
+        (message) => message.payload.kind === "compact-first",
+      )
+        ? { compactFirst: true }
+        : {}),
     },
     source: {
       kind: "drain",

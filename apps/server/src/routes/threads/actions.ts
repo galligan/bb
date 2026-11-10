@@ -30,6 +30,7 @@ import {
 } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
+import { PLUGIN_RPC_CALLER_HEADER } from "../../services/plugins/plugin-rpc-caller.js";
 import {
   emitPluginMessageCancelled,
   emitPluginMessageQueued,
@@ -452,7 +453,20 @@ export function registerThreadActionRoutes(
 
   post(routes.compact, async (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
-    await compactThreadContext(deps, thread);
+    const caller = plugins.resolveRpcCaller(
+      context.req.header(PLUGIN_RPC_CALLER_HEADER),
+    );
+    if (!caller.ok)
+      throw new ApiError(
+        403,
+        "invalid_request",
+        `the ${PLUGIN_RPC_CALLER_HEADER} token isn't a running plugin's caller token`,
+      );
+    const source = resolveRequestSource(context, plugins.resolveRpcCaller);
+    await compactThreadContext(deps, thread, {
+      origin: source.kind === "api" ? "sdk" : source.kind,
+      originPluginId: source.kind === "plugin" ? source.pluginId : null,
+    });
     return context.json({ ok: true });
   });
 

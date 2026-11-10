@@ -625,10 +625,7 @@ async function sendThreadMessageWithoutContextClear(
     threadId: thread.id,
   });
   // No hook pass here. User messages are decided ONCE, at the dispatch
-  // checkpoint in `attemptDispatch`, before they reach this function. The two
-  // other callers bypass the checkpoint deliberately: a manual compaction turn
-  // and an edited message's re-send are operations on the thread's existing
-  // conversation, not new work a limiter admits.
+  // checkpoint in `attemptDispatch`, before they reach this function.
   const permissionEscalation = resolvePermissionEscalation({
     initiator,
   });
