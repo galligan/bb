@@ -163,7 +163,11 @@ export type QueuedMessageWaitHolder = z.infer<
  * is editable: the point of a retry is to re-submit the original faithfully,
  * with no duplicated user message.
  */
-export const queuedMessagePayloadKindValues = ["inline", "retry"] as const;
+export const queuedMessagePayloadKindValues = [
+  "inline",
+  "retry",
+  "compact-first",
+] as const;
 export const queuedMessagePayloadKindSchema = z.enum(
   queuedMessagePayloadKindValues,
 );
@@ -173,6 +177,7 @@ export type QueuedMessagePayloadKind = z.infer<
 
 export const queuedMessagePayloadSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("inline") }),
+  z.object({ kind: z.literal("compact-first") }),
   z.object({
     kind: z.literal("retry"),
     /**

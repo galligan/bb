@@ -646,6 +646,27 @@ Docs: `backend-events.md`.
   Confirm nothing renders a plugin's instant as a user's schedule.
 - **Send-now bypasses every plugin check**, including a content-policy
   `reject`. Confirm it, or split `wait` bypass from `reject` bypass.
+- **Native compaction shares admission.** Compact from the composer, CLI and
+  SDK uses this checkpoint. Verify plugin caller attribution survives a wait
+  and drain. A queued `compact-first` payload retains the requested operation
+  until compaction and its follow-up are recorded atomically; only then does
+  it become `inline`. Automatic compact-first drain checks the manual-stop
+  pause even when it was held by a plugin; Send-now remains explicit override.
+  Audit restart, grouping, cancellation and claim races.
+  This remains a policy hook with Send-now override, not the unconditional
+  provider-runtime security boundary requested in issue #6134.
+  Plugins relying on this contract must declare both `engines.bb` and
+  `engines.bbPluginSdk` using verified releases containing the change; their
+  build-time SDK dependency alone does not gate the installed runtime.
+  No released version floor is established by this prototype. Development
+  app versions such as `0.0.0` skip the app engine check, not the SDK check.
+  The baseline cannot read persisted `compact-first` rows. Manifest checks
+  do not protect an older core opening the database after a downgrade.
+  In-place rollback of post-upgrade data is unsupported: stop the runtime,
+  preserve that data, and restore a consistent pre-upgrade data and plugin
+  snapshot with its matching binary. Do not relabel rows as `inline` or
+  dispatch them to make rollback possible. No new database downgrade guard
+  is implied; unsupported older readers can still produce the known 500.
 - **"Never started" is a thread status.** Confirm `pending` is maintained
   everywhere the old event-log probe was consulted.
 - **The context DTOs.** `thread`, `project`, `environment`, `host` and

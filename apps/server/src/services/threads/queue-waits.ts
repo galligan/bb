@@ -1,4 +1,5 @@
 import {
+  afterCommit,
   moveQueuedThreadMessageToFrontInTransaction,
   clearQueuedThreadMessageWaitingOn,
   createQueuedThreadMessageInTransaction,
@@ -28,6 +29,8 @@ import {
 } from "../plugins/plugin-thread-events.js";
 import { toThreadQueuedMessage } from "./thread-queued-messages.js";
 import { assertThreadHostAcceptsWork } from "./thread-host-admission.js";
+
+import { NotificationBuffer } from "../lib/notification-buffer.js";
 
 type QueueWaitDeps = { db: DbQueryConnection; hub: DbNotifier };
 
@@ -81,6 +84,7 @@ export interface QueuedDispatchMessage {
 }
 
 export interface RecordQueuedMessageWaitArgs {
+  compactionStarted?: true;
   thread: Thread;
   message: QueuedDispatchMessage;
   placement: "back" | "front";
@@ -117,6 +121,7 @@ export function recordQueuedMessageWait(
   deps: QueueWaitDeps,
   args: RecordQueuedMessageWaitArgs,
 ): ThreadQueuedMessage | null {
+  const notifications = new NotificationBuffer();
   const claimed = args.claimed ?? [];
   const leadClaim = claimed[0];
   let row: QueuedThreadMessageRow | null;
@@ -149,7 +154,8 @@ export function recordQueuedMessageWait(
       { behavior: "immediate" },
     );
   } else {
-    row = requeueClaimedQueuedThreadMessages(deps.db, deps.hub, {
+    row = requeueClaimedQueuedThreadMessages(deps.db, notifications, {
+      ...(args.compactionStarted ? { compactionStarted: true } : {}),
       claims: claimed.map((claim) => ({
         id: claim.id,
         claimToken: claim.claimToken,
@@ -166,8 +172,11 @@ export function recordQueuedMessageWait(
     return null;
   }
   const entry = toThreadQueuedMessage(row);
-  emitPluginMessageQueued(entry);
-  deps.hub.notifyThread(args.thread.id, ["queue-changed"]);
+  afterCommit(deps.db, () => {
+    notifications.flushInto(deps.hub);
+    emitPluginMessageQueued(entry);
+    deps.hub.notifyThread(args.thread.id, ["queue-changed"]);
+  });
   return entry;
 }
 

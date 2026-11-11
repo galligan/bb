@@ -158,8 +158,8 @@ export function storedQueuedThreadMessageRequestedBy(
 function toQueuedMessagePayload(
   row: StoredQueuedThreadMessageRow,
 ): QueuedMessagePayload {
-  if (row.payloadKind === "inline") {
-    return { kind: "inline" };
+  if (row.payloadKind === "inline" || row.payloadKind === "compact-first") {
+    return { kind: row.payloadKind };
   }
   if (
     row.retryOfTurnRequestId === null ||
@@ -208,10 +208,8 @@ export function toThreadQueuedMessage(
     failureReason: row.failureReason,
     payload: toQueuedMessagePayload(row),
     systemNotice: parseStoredQueuedThreadMessageSystemNotice(row),
-    // An `inline` draft stops being editable the moment the drain claims it:
-    // the row is on its way to a provider and a rewrite would be lost.
     editable:
-      row.payloadKind === "inline" &&
+      row.payloadKind !== "retry" &&
       row.state !== "claimed" &&
       row.systemNotice === null,
     createdAt: row.createdAt,

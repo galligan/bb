@@ -73,7 +73,9 @@ export async function acceptThreadSendRequest(
         thread: args.thread,
         payload,
         source: { kind: "inline" },
-        queuePayload: { kind: "inline" },
+        queuePayload: compactFirst
+          ? { kind: "compact-first" }
+          : { kind: "inline" },
         pluginSubmission: payload.pluginSubmission ?? null,
         systemNotice: null,
         origin: payload.originPluginId === undefined ? null : "plugin",

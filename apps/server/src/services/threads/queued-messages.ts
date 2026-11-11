@@ -341,7 +341,11 @@ function respectsManualStopPause(
   return (
     args.mode === "auto" &&
     !args.sendNow &&
-    args.queuedMessages.some(isOrdinaryTurnEndQueuedMessage)
+    args.queuedMessages.some(
+      (row) =>
+        row.payloadKind === "compact-first" ||
+        isOrdinaryTurnEndQueuedMessage(row),
+    )
   );
 }
 
@@ -361,6 +365,9 @@ function sendQueuedMessagePayload(
   return {
     input: queuedMessage.content,
     mode,
+    ...(queuedMessage.payload.kind === "compact-first"
+      ? { compactFirst: true }
+      : {}),
     model: queuedMessage.model,
     permissionMode: queuedMessage.permissionMode,
     reasoningLevel: queuedMessage.reasoningLevel,
@@ -503,6 +510,11 @@ async function sendClaimedQueuedMessageForThread(
           )
         : { input, mode }),
       ...(inputGroups.length > 1 ? { inputGroups } : {}),
+      ...(queuedMessages.some(
+        (message) => message.payload.kind === "compact-first",
+      )
+        ? { compactFirst: true }
+        : {}),
     },
     source: {
       kind: "drain",
@@ -530,6 +542,7 @@ async function sendClaimedQueuedMessageForThread(
     args.sendNow &&
     args.mode !== "steer" &&
     outcome.kind === "queued" &&
+    outcome.compactionStarted !== true &&
     outcome.entry.waitingOn?.kind !== "stopping"
   ) {
     // "Send now" overrides every plugin wait and the row's own schedule, but
