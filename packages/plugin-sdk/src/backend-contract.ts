@@ -766,6 +766,12 @@ export interface PluginHooks {
    * passes the checkpoint again after compaction. Automatic compactFirst
    * retries honor the native manual-stop queue pause even after a plugin
    * wait; the explicit Send-now override remains available.
+   * Plugins relying on this contract must declare engines.bb and
+   * engines.bbPluginSdk floors verified against released builds containing
+   * it. A build-time SDK pin does not gate runtime activation. Older cores
+   * cannot read queued compact-first rows; plugin engine checks do not
+   * protect a core downgrade. Restore a pre-upgrade snapshot instead of
+   * opening post-upgrade data with an older core.
    *
    * **Hooks are questions core asks.** Core stops at a checkpoint, hands the
    * handler a context, and ACTS ON what it returns — the opposite of
